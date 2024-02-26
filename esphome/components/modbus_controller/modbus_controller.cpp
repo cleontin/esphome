@@ -111,7 +111,7 @@ void ModbusController::on_modbus_read_registers(uint8_t function_code, uint16_t 
     bool found = false;
     for (auto *server_register : this->server_registers_) {
       if (server_register->address == current_address) {
-        float value = server_register->lambda();
+        float value = server_register->read_lambda();
 
         ESP_LOGD(TAG, "Matched register. Address: 0x%02X. Value type: %zu. Register count: %u. Value: %0.1f.",
                  server_register->address, static_cast<uint8_t>(server_register->value_type),

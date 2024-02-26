@@ -23,6 +23,7 @@ CODEOWNERS = ["@martgras"]
 
 AUTO_LOAD = ["modbus"]
 
+CONF_READ_LAMBDA = "read_lambda"
 CONF_SERVER_REGISTERS = "server_registers"
 MULTI_CONF = True
 
@@ -103,7 +104,7 @@ ModbusServerRegisterSchema = cv.Schema(
         cv.GenerateID(): cv.declare_id(ServerRegister),
         cv.Required(CONF_ADDRESS): cv.positive_int,
         cv.Optional(CONF_VALUE_TYPE, default="U_WORD"): cv.enum(SENSOR_VALUE_TYPE),
-        cv.Required(CONF_LAMBDA): cv.returning_lambda,
+        cv.Required(CONF_READ_LAMBDA): cv.returning_lambda,
     }
 )
 
@@ -234,7 +235,7 @@ async def to_code(config):
                         server_register[CONF_VALUE_TYPE],
                         TYPE_REGISTER_MAP[server_register[CONF_VALUE_TYPE]],
                         await cg.process_lambda(
-                            server_register[CONF_LAMBDA],
+                            server_register[CONF_READ_LAMBDA],
                             [],
                             return_type=cg.float_,
                         ),
