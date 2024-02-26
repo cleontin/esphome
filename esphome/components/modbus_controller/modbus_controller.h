@@ -254,14 +254,13 @@ class SensorItem {
 
 class ServerRegister {
  public:
-  ServerRegister(uint16_t start_address, SensorValueType value_type, uint8_t register_count,
-                 std::function<float()> lambda) {
-    this->start_address = start_address;
+  ServerRegister(uint16_t address, SensorValueType value_type, uint8_t register_count, std::function<float()> lambda) {
+    this->address = address;
     this->value_type = value_type;
     this->register_count = register_count;
     this->lambda = std::move(lambda);
   }
-  uint16_t start_address;
+  uint16_t address;
   SensorValueType value_type;
   uint8_t register_count;
   std::function<float()> lambda;

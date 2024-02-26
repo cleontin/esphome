@@ -80,7 +80,7 @@ modbus_controller:
     address: 0x2
     modbus_id: mod_bus2
     server_registers:
-      - start_address: 0x0000
+      - address: 0x0000
         value_type: S_DWORD_R
         lambda: |-
           return 42.3;

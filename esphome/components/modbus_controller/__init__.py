@@ -23,7 +23,6 @@ CODEOWNERS = ["@martgras"]
 
 AUTO_LOAD = ["modbus"]
 
-CONF_START_ADDRESS = "start_address"
 CONF_SERVER_REGISTERS = "server_registers"
 MULTI_CONF = True
 
@@ -102,7 +101,7 @@ _LOGGER = logging.getLogger(__name__)
 ModbusServerRegisterSchema = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(ServerRegister),
-        cv.Required(CONF_START_ADDRESS): cv.positive_int,
+        cv.Required(CONF_ADDRESS): cv.positive_int,
         cv.Optional(CONF_VALUE_TYPE, default="U_WORD"): cv.enum(SENSOR_VALUE_TYPE),
         cv.Required(CONF_LAMBDA): cv.returning_lambda,
     }
@@ -231,7 +230,7 @@ async def to_code(config):
                 var.add_server_register(
                     cg.new_Pvariable(
                         server_register[CONF_ID],
-                        server_register[CONF_START_ADDRESS],
+                        server_register[CONF_ADDRESS],
                         server_register[CONF_VALUE_TYPE],
                         TYPE_REGISTER_MAP[server_register[CONF_VALUE_TYPE]],
                         await cg.process_lambda(

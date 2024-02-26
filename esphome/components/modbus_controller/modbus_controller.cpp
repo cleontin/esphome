@@ -110,11 +110,11 @@ void ModbusController::on_modbus_read_registers(uint8_t function_code, uint16_t 
   for (uint16_t current_address = start_address; current_address < start_address + number_of_registers;) {
     bool found = false;
     for (auto *server_register : this->server_registers_) {
-      if (server_register->start_address == current_address) {
+      if (server_register->address == current_address) {
         float value = server_register->lambda();
 
-        ESP_LOGD(TAG, "Matched register. Start address: 0x%02X. Value type: %zu. Register count: %u. Value: %0.1f.",
-                 server_register->start_address, static_cast<uint8_t>(server_register->value_type),
+        ESP_LOGD(TAG, "Matched register. Address: 0x%02X. Value type: %zu. Register count: %u. Value: %0.1f.",
+                 server_register->address, static_cast<uint8_t>(server_register->value_type),
                  server_register->register_count, value);
         number_to_payload(sixteen_bit_response, value, server_register->value_type);
         current_address += server_register->register_count;
@@ -353,7 +353,7 @@ void ModbusController::dump_config() {
   }
   ESP_LOGCONFIG(TAG, "server registers");
   for (auto &r : server_registers_) {
-    ESP_LOGCONFIG(TAG, "  Start adress=0x%02X value_type=%zu register_count=%u", r->start_address,
+    ESP_LOGCONFIG(TAG, "  Adress=0x%02X value_type=%zu register_count=%u", r->address,
                   static_cast<uint8_t>(r->value_type), r->register_count);
   }
 #endif
