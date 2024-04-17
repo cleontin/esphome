@@ -108,7 +108,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
         return false;
       }
-      ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,data_len).c_str());
+      ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,data_len).c_str());
     }
   }
   std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
@@ -134,7 +134,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
   if (!found) {
     ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
-    ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,data_len).c_str());
+    ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,data_len).c_str());
   }
 
   // return false to reset buffer
