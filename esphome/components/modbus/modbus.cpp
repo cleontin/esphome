@@ -91,12 +91,11 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
     // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
     if (function_code == 0x10) {
-      st_addr_offset = 2
-      st_addr = uint16_t(raw[st_addr_offset]) << 8 | (uint16_t(raw[st_addr_offset + 1]))
-      reg_num_offset = 4 
-      reg_num = uint16_t(raw[reg_num_offset]) << 8 | (uint16_t(raw[reg_num_offset + 1]))
-      data_offset = 6;
-      data_len = 4;
+      uint16_t st_addr = uint16_t(raw[2]) << 8 | (uint16_t(raw[2 + 1]))
+      uint16_t reg_num = uint16_t(raw[4]) << 8 | (uint16_t(raw[4 + 1]))
+      uint8_t num_bytes = raw[6]
+      data_offset = 7
+      data_len = num_bytes;
     }
 
     // Error ( msb indicates error )
