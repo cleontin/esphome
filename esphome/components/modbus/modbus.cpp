@@ -84,8 +84,18 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     }
 
     // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
-    if (function_code == 0x5 || function_code == 0x06 || function_code == 0xF || function_code == 0x10) {
+    if (function_code == 0x5 || function_code == 0x06 || function_code == 0xF) {
       data_offset = 2;
+      data_len = 4;
+    }
+
+    // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
+    if (function_code == 0x10) {
+      st_addr_offset = 2
+      st_addr = uint16_t(raw[st_addr_offset]) << 8 | (uint16_t(raw[st_addr_offset + 1]))
+      reg_num_offset = 4 
+      reg_num = uint16_t(raw[reg_num_offset]) << 8 | (uint16_t(raw[reg_num_offset + 1]))
+      data_offset = 6;
       data_len = 4;
     }
 
@@ -116,7 +126,6 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         return false;
       }
     }
-    ESP_LOGW(TAG, "Good Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
   }
   std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
   bool found = false;
@@ -144,6 +153,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
   if (!found) {
     ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
+    ESP_LOGW(TAG, "Good Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
   }
 
   // return false to reset buffer
