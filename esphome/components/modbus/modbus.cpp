@@ -112,9 +112,11 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
         ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
       } else {
         ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
+	ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
         return false;
       }
     }
+    ESP_LOGW(TAG, "Good Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
   }
   std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
   bool found = false;
