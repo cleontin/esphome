@@ -152,7 +152,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
   if (!found) {
     ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
-    ESP_LOGW(TAG, "Good Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
+    ESP_LOGW(TAG, "Good Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
   }
 
   // return false to reset buffer
