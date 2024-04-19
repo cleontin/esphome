@@ -120,38 +120,10 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     return false; //Start again
   }
 
-  std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
-  bool found = false;
-  for (auto *device : this->devices_) {
-    if (device->address_ == address) {
-      // Is it an error response?
-      if ((function_code & 0x80) == 0x80) {
-        ESP_LOGD(TAG, "Modbus error function code: 0x%X exception: %d", function_code, raw[2]);
-        if (waiting_for_response != 0) {
-          device->on_modbus_error(function_code & 0x7F, raw[2]);
-        } else {
-          // Ignore modbus exception not related to a pending command
-          ESP_LOGD(TAG, "Ignoring Modbus error - not expecting a response");
-        }
-      } else if (this->role == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
-        device->on_modbus_read_registers(function_code, uint16_t(data[1]) | (uint16_t(data[0]) << 8),
-                                         uint16_t(data[3]) | (uint16_t(data[2]) << 8));
-      } else {
-        device->on_modbus_data(data);
-      }
-      found = true;
-    }
-  }
-  waiting_for_response = 0;
 
-  if (!found) {
-    ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
-    ESP_LOGW(TAG, "  Good Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
-    ESP_LOGW(TAG, "  Offset: %d, RqLen: %d, RsLen: %d, At: %d", data_offset, data_len, rs_data_len, at);
-  }
+  ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
+  ESP_LOGW(TAG, "  Offset: %d, RqLen: %d, RsLen: %d, At: %d", data_offset, data_len, rs_data_len, at);
 
-  // return false to reset buffer
-  //return false;
 }
 
 void Modbus::dump_config() {
