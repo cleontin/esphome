@@ -54,8 +54,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     return true;
 
   uint8_t data_offset = 2;
-  uint8_t data_len;
-  uint8_t rs_data_len;
+  uint8_t data_len = 1;
+  uint8_t rs_data_len = 1;
 
 
   // Data length and offset depends on the function code and whether the frame is a request or a response
