@@ -126,6 +126,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   //ESP_LOGW(TAG, "  RqLen: %d", data_len);
   //ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
   //ESP_LOGW(TAG, "  At: %d", uint8_t(at));
+  return true;
 
 }
 
