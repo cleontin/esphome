@@ -121,10 +121,10 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   }
 
 
-  ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
-  ESP_LOGW(TAG, "  Offset: %d", data_offset);
-  ESP_LOGW(TAG, "  RqLen: %d", data_len);
-  ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
+  //ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
+  //ESP_LOGW(TAG, "  Offset: %d", data_offset);
+  //ESP_LOGW(TAG, "  RqLen: %d", data_len);
+  //ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
   //ESP_LOGW(TAG, "  At: %d", uint8_t(at));
 
 }
