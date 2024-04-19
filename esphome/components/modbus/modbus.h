@@ -38,13 +38,15 @@ class Modbus : public uart::UARTDevice, public Component {
   void set_send_wait_time(uint16_t time_in_ms) { send_wait_time_ = time_in_ms; }
   void set_disable_crc(bool disable_crc) { disable_crc_ = disable_crc; }
 
+  void handle_request();
+  void handle_response();
+
   ModbusRole role;
 
  protected:
   GPIOPin *flow_control_pin_{nullptr};
 
   bool parse_modbus_byte_(uint8_t byte);
-  void handle_frame(std::vector<uint8_t> &data, bool is_response);
   uint16_t send_wait_time_{250};
   bool disable_crc_;
   std::vector<uint8_t> rx_buffer_;
