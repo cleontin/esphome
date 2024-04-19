@@ -100,9 +100,9 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
 
     if (computed_crc == remote_crc) {
-      ESP_LOGV(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
-      ESP_LOGV(TAG, "  Function: %02X request, Len: %02X", function_code, data_len);
-      ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
+      //ESP_LOGV(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      //ESP_LOGV(TAG, "  Function: %02X request, Len: %02X", function_code, data_len);
+      //ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
       this->handle_request();
       return false; // Start a new frame
     }
@@ -112,9 +112,9 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     uint16_t remote_crc = uint16_t(raw[data_offset + rs_data_len]) | (uint16_t(raw[data_offset + rs_data_len + 1]) << 8);
 
     if (computed_crc == remote_crc) {
-      ESP_LOGW(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
-      ESP_LOGW(TAG, "  Function: %02X response, Len: %02X", function_code, rs_data_len);
-      ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
+      //ESP_LOGW(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      //ESP_LOGW(TAG, "  Function: %02X response, Len: %02X", function_code, rs_data_len);
+      //ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
       this->handle_response();
       return false; // Start a new frame
     }
