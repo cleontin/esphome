@@ -141,7 +141,7 @@ void Modbus::handle_request() {
 
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
-  uint16_t starting_address = 0;
+  uint16_t start_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
 
@@ -166,7 +166,7 @@ void Modbus::handle_response() {
 
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
-  uint16_t starting_address = 0;
+  uint16_t start_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
 
@@ -180,7 +180,9 @@ void Modbus::handle_response() {
     ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response:", frame_address, function_code);
     ESP_LOGW(TAG, "  Written %d elements starting at address %d.", quantity, start_address);
   } else if ((function_code & 0x80) == 0x80) {
-    data_len = 1;
+    uint8_t error_code = data[2];
+    function_code &= 0x7F;
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X returned error code 0x%02X.", frame_address, function_code, error_code);
   }
 }
 
