@@ -137,7 +137,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
 void Modbus::handle_request() {
 
-  const uint8_t *raw = &this->rx_buffer_[0];
+  const uint8_t *data = &this->rx_buffer_[0];
 
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
