@@ -40,92 +40,86 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   this->rx_buffer_.push_back(byte);
   const uint8_t *raw = &this->rx_buffer_[0];
   ESP_LOGV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
-  // Byte 0: modbus address (match all)
+
   if (at == 0)
+    // Byte 0: modbus address, valid so far
     return true;
+
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  // Byte 2: Size (with modbus rtu function code 4/3)
-  // See also https://en.wikipedia.org/wiki/Modbus
-  if (at == 2)
+  
+  
+  // We need at least byte 3  (2 and 3 being CRC) for a valid message
+  if (at < 3)
     return true;
 
-  uint8_t data_len = raw[2];
-  uint8_t data_offset = 3;
+  uint8_t data_offset = 2;
+  uint8_t data_len;
+  uint8_t rs_data_len;
 
-  // Per https://modbus.org/docs/Modbus_Application_Protocol_V1_1b3.pdf Ch 5 User-Defined function codes
-  if (((function_code >= 65) && (function_code <= 72)) || ((function_code >= 100) && (function_code <= 110))) {
-    // Handle user-defined function, since we don't know how big this ought to be,
-    // ideally we should delegate the entire length detection to whatever handler is
-    // installed, but wait, there is the CRC, and if we get a hit there is a good
-    // chance that this is a complete message ... admittedly there is a small chance is
-    // isn't but that is quite small given the purpose of the CRC in the first place
 
-    // Fewer than 2 bytes can't calc CRC
-    if (at < 2)
-      return true;
-
-    data_len = at - 2;
-    data_offset = 1;
-
-    uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
-
-    if (computed_crc != remote_crc)
-      return true;
-
-    ESP_LOGD(TAG, "Modbus user-defined function %02X found", function_code);
-
-  } else {
-    // data starts at 2 and length is 4 for read registers commands
-    if (this->role == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
-      data_offset = 2;
-      data_len = 4;
+  // Data length and offset depends on the function code and whether the frame is a request or a response
+  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+    data_len = 4;
+    if (at > 1) {
+	rs_data_len = uint8_t(raw[2]) + 1;
+    } else {
+	rs_data_len = 2;
     }
-
-    // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
-    if (function_code == 0x5 || function_code == 0x06 || function_code == 0xF) {
-      data_offset = 2;
-      data_len = 4;
-    }
-
-    // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
-    if (function_code == 0x10) {
-      uint16_t st_addr = uint16_t(raw[2]) << 8 | (uint16_t(raw[2 + 1]));
-      uint16_t reg_num = uint16_t(raw[4]) << 8 | (uint16_t(raw[4 + 1]));
-      uint8_t num_bytes = raw[6];
-      data_offset = 7;
-      data_len = num_bytes;
-    }
-
-    // Error ( msb indicates error )
-    // response format:  Byte[0] = device address, Byte[1] function code | 0x80 , Byte[2] exception code, Byte[3-4] crc
-    if ((function_code & 0x80) == 0x80) {
-      data_offset = 2;
-      data_len = 1;
-    }
-
-    // Byte data_offset..data_offset+data_len-1: Data
-    if (at < data_offset + data_len)
-      return true;
-
-    // Byte 3+data_len: CRC_LO (over all bytes)
-    if (at == data_offset + data_len)
-      return true;
-
-    // Byte data_offset+len+1: CRC_HI (over all bytes)
-    uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
-    if (computed_crc != remote_crc) {
-      if (this->disable_crc_) {
-        ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
-      } else {
-        ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
-	ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
-        return false;
-      }
-    }
+  } else if (function_code == 0x5 || function_code == 0x6) {
+    data_len = 4;
+    rs_data_len = 4;
+  } else if (function_code == 0x7) {
+    data_len = 0;
+    rs_data_len = 1;
+  } else if (function_code == 0x9) {
+    data_len = 0;
+    rs_data_len = 4;
+  } else if (function_code == 0xF || function_code == 0x10) {
+    if (at > 5) {
+      data_len = uint8_t(raw[6]) + 5;
+    } else {
+      data_len = 6
+    } 
+    rs_data_len = 4;
+  } else if ((function_code & 0x80) == 0x80) {
+    data_len = 1;
   }
+
+  // We need the CRC bytes for either a request or a response 
+  if ((at < data_offset + data_len + 1) && (at < data_offset + rs_data_len + 1))
+    return true;
+
+  // Are we at the right length for a request or response?
+  if (at = data_offset + data_len + 1) {
+    // We might have a request here
+    uint16_t computed_crc = crc16(raw, data_offset + data_len);
+    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
+
+    if (computed_crc == remote_crc) {
+      ESP_LOGW(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      ESP_LOGW(TAG, "  Function: %02X request, Len: %02X", function_code, data_len)
+      ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
+      return false; // Start a new frame
+    }
+  } else if (at = data_offset + rs_data_len + 1) {
+    // Check for a response
+    uint16_t computed_crc = crc16(raw, data_offset + rs_data_len);
+    uint16_t remote_crc = uint16_t(raw[data_offset + rs_data_len]) | (uint16_t(raw[data_offset + rs_data_len + 1]) << 8);
+
+    if (computed_crc == remote_crc) {
+      ESP_LOGW(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      ESP_LOGW(TAG, "  Function: %02X request, Len: %02X", function_code, data_len)
+      ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,raw[2]).c_str());
+      return false; // Start a new frame
+    }
+  } 
+  
+  if ((at > data_offset + data_len + 1) && (at > data_offset + rs_data_len + 1)) {
+    ESP_LOGW(TAG, "Frame did not match: %s", format_hex_pretty(raw,at).c_str());
+    return false; //Start again
+  }
+
   std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
   bool found = false;
   for (auto *device : this->devices_) {
