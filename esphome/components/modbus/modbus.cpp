@@ -103,7 +103,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       ESP_LOGV(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
       ESP_LOGV(TAG, "  Function: %02X request, Len: %02X", function_code, data_len);
       ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
-      this->handle_frame(data, false);
+      this->handle_request();
       return false; // Start a new frame
     }
   } else if (at == data_offset + rs_data_len + 1) {
@@ -115,62 +115,73 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       ESP_LOGW(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
       ESP_LOGW(TAG, "  Function: %02X response, Len: %02X", function_code, rs_data_len);
       ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
-      this->handle_frame(data, true);
+      this->handle_response();
       return false; // Start a new frame
     }
   } 
   
   if ((at > data_offset + data_len + 1) && (at > data_offset + rs_data_len + 1)) {
     ESP_LOGW(TAG, "Frame did not match: %s", format_hex_pretty(raw,at+1).c_str());
+    ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
+    ESP_LOGW(TAG, "  Offset: %d", data_offset);
+    ESP_LOGW(TAG, "  RqLen: %d", data_len);
+    ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
+    ESP_LOGW(TAG, "  At: %d", uint8_t(at));
     return false; //Start again
   }
 
 
-  //ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
-  //ESP_LOGW(TAG, "  Offset: %d", data_offset);
-  //ESP_LOGW(TAG, "  RqLen: %d", data_len);
-  //ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
-  //ESP_LOGW(TAG, "  At: %d", uint8_t(at));
   return true;
 
 }
 
-void Modbus::handle_frame(const std::vector<uint8_t> &data, bool is_response) {
+void Modbus::handle_request() {
+
+  const uint8_t *raw = &this->rx_buffer_[0];
+
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
   uint16_t starting_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
-  if (is_response) {
-    if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
-      byte_count = data[2];
-      ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response with %d bytes of data:", frame_address, function_code, byte_count);
-      ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[3], byte_count).c_str());
-    } else if (function_code == 0xF || function_code == 0x10) {
-      starting_address = uint16_t(data[2] << 8 | data[3]);
-      quantity = uint16_t(data[4] << 8 | data[5]);
-      ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response:", frame_address, function_code);
-      ESP_LOGW(TAG, "  Written %d elements starting at address %d.", quantity, start_address);
-    } else if ((function_code & 0x80) == 0x80) {
-      data_len = 1;
-    }
-  } else {
-    if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
-      starting_address = uint16_t(data[2] << 8 | data[3]);
-      quantity = uint16_t(data[4] << 8 | data[5]);
-      ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request.", frame_address, function_code);
-      ESP_LOGW(TAG, "  Rquesting %d elements starting at address %d.", quantity, start_address);
-    } else if (function_code == 0xF || function_code == 0x10) {
-      starting_address = uint16_t(data[2] << 8 | data[3]);
-      quantity = uint16_t(data[4] << 8 | data[5]);
-      byte_count = data[6];
-      ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request:", frame_address, function_code);
-      ESP_LOGW(TAG, "  Write %d elements (%d bytes)starting at address %d.", quantity, byte_count, start_address);
-      ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[7], byte_count).c_str());
-    }
 
+  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+    starting_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request.", frame_address, function_code);
+    ESP_LOGW(TAG, "  Rquesting %d elements starting at address %d.", quantity, start_address);
+  } else if (function_code == 0xF || function_code == 0x10) {
+    starting_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    byte_count = data[6];
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request:", frame_address, function_code);
+    ESP_LOGW(TAG, "  Write %d elements (%d bytes)starting at address %d.", quantity, byte_count, start_address);
+    ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[7], byte_count).c_str());
   }
+}
 
+void Modbus::handle_response() {
+
+  const uint8_t *data = &this->rx_buffer_[0];
+
+  uint8_t frame_address = data[0];
+  uint8_t function_code = data[1];
+  uint16_t starting_address = 0;
+  uint16_t quantity = 0;
+  uint8_t byte_count = 0;
+
+  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+    byte_count = data[2];
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response with %d bytes of data:", frame_address, function_code, byte_count);
+    ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[3], byte_count).c_str());
+  } else if (function_code == 0xF || function_code == 0x10) {
+    starting_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response:", frame_address, function_code);
+    ESP_LOGW(TAG, "  Written %d elements starting at address %d.", quantity, start_address);
+  } else if ((function_code & 0x80) == 0x80) {
+    data_len = 1;
+  }
 }
 
 void Modbus::dump_config() {
