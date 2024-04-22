@@ -255,8 +255,9 @@ void Modbus::send_raw(const std::vector<uint8_t> &payload) {
     return;
   }
 
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(true);
+  // disable transmitting for now
+  //if (this->flow_control_pin_ != nullptr)
+  //  this->flow_control_pin_->digital_write(true);
 
   auto crc = crc16(payload.data(), payload.size());
   this->write_array(payload);
