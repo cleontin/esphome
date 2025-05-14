@@ -35,6 +35,29 @@ void Modbus::loop() {
   }
 }
 
+const char* get_function_code_name(uint8_t code) {
+  switch (code) {
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadCoils):
+      return "Read Coils";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadDiscreteInputs):
+      return "Read Discrete Inputs";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadHoldingRegisters):
+      return "Read Holding Registers";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadInputRegisters):
+      return "Read Input Registers";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteSingleCoil):
+      return "Write Single Coil";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteSingleRegister):
+      return "Write Single Register";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteMultipleCoils):
+      return "Write Multiple Coils";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteMultipleRegisters):
+      return "Write Multiple Registers";
+    default:
+      return "Unknown Function Code";
+  }
+}
+
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
   size_t at = this->rx_buffer_.size();
   this->rx_buffer_.push_back(byte);
@@ -59,30 +82,33 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
 
   // Data length and offset depends on the function code and whether the frame is a request or a response
-  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
     data_len = 4;
-    if (at > 1) {
-	rs_data_len = uint8_t(raw[2]) + 1;
-    } else {
-	rs_data_len = 2;
-    }
-  } else if (function_code == 0x5 || function_code == 0x6) {
+    rs_data_len = (at > 1) ? uint8_t(raw[2]) + 1 : 2;
+  }
+  else if (code == ModbusFunctionCode::WriteSingleCoil ||
+             code == ModbusFunctionCode::WriteSingleRegister) {
     data_len = 4;
     rs_data_len = 4;
-  } else if (function_code == 0x7) {
+  }
+  else if (function_code == 0x7) {
     data_len = 0;
     rs_data_len = 1;
-  } else if (function_code == 0x9) {
+  }
+  else if (function_code == 0x9) {
     data_len = 0;
     rs_data_len = 4;
-  } else if (function_code == 0xF || function_code == 0x10) {
-    if (at > 5) {
-      data_len = uint8_t(raw[6]) + 5;
-    } else {
-      data_len = 6;
-    } 
+  }
+  else if (code == ModbusFunctionCode::WriteMultipleCoils  ||
+             code == ModbusFunctionCode::WriteMultipleRegisters) {
+    data_len = (at > 5) ? uint8_t(raw[6]) + 5 : 6;
     rs_data_len = 4;
-  } else if ((function_code & 0x80) == 0x80) {
+  }
+  else if ((function_code & 0x80) == 0x80) {
     data_len = 1;
   }
 
@@ -130,7 +156,6 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     return false; //Start again
   }
 
-
   return true;
 
 }
@@ -141,22 +166,49 @@ void Modbus::handle_request() {
 
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
   uint16_t start_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
 
-  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
     start_address = uint16_t(data[2] << 8 | data[3]);
     quantity = uint16_t(data[4] << 8 | data[5]);
-    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request.", frame_address, function_code);
-    ESP_LOGW(TAG, "  Rquesting %d elements starting at address %d.", quantity, start_address);
-  } else if (function_code == 0xF || function_code == 0x10) {
+    ESP_LOGW(TAG, "Device 0x%02X Requesting %s(0x%02X) %d elements starting at address %d.",
+             frame_address, get_function_code_name(function_code), function_code, quantity, start_address);
+  }
+  else if (code == ModbusFunctionCode::WriteMultipleCoils ||
+           code == ModbusFunctionCode::WriteMultipleRegisters) {
     start_address = uint16_t(data[2] << 8 | data[3]);
     quantity = uint16_t(data[4] << 8 | data[5]);
     byte_count = data[6];
-    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X request:", frame_address, function_code);
-    ESP_LOGW(TAG, "  Write %d elements (%d bytes)starting at address %d.", quantity, byte_count, start_address);
-    ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[7], byte_count).c_str());
+    ESP_LOGW(TAG, "Device 0x%02X Request %s(0x%02X): %d elements (%d bytes) starting at address %d.",
+             frame_address, get_function_code_name(function_code), function_code, quantity, byte_count, start_address);
+    //ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[7], byte_count).c_str());
+    if (code == ModbusFunctionCode::WriteMultipleRegisters) {
+      char buffer[2048];
+      int offset = 0;
+      for (int byte_index = 0; byte_index < byte_count; byte_index += 2) {
+        int value = data[7 + byte_index] << 8 | data[8 + byte_index];
+        offset += sprintf(buffer + offset, "%d, ", value);
+        //offset += sprintf(buffer + offset, "%d::%d, ", byte_index, byte_count);
+      }
+      ESP_LOGI(TAG, " Values: %s", buffer);
+
+    }
+  
+    for (auto *server : this->servers_) {
+      if (server->address_ == frame_address || (server->accept_broadcast_ && frame_address == 0)) {
+        ESP_LOGW(TAG, "Found matching server with address %d", server->address_);
+        if (server->register_start_ >= start_address && (server->register_start_ + server->register_count_) <= (start_address + quantity)) {
+          int listener_offset = server->register_start_ - start_address;
+          server->on_register_update(&data[7+listener_offset], byte_count);
+        }
+      }
+    }
   }
 }
 
@@ -166,19 +218,31 @@ void Modbus::handle_response() {
 
   uint8_t frame_address = data[0];
   uint8_t function_code = data[1];
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
   uint16_t start_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
 
-  if (function_code == 0x1 || function_code == 0x2 || function_code == 0x3 || function_code == 0x4) {
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
     byte_count = data[2];
-    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response with %d bytes of data:", frame_address, function_code, byte_count);
-    ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[3], byte_count).c_str());
-  } else if (function_code == 0xF || function_code == 0x10) {
+    ESP_LOGW(TAG, "Device 0x%02X Responding %s(0x%02X) with %d bytes of data:", frame_address, get_function_code_name(function_code), function_code, byte_count);
+    if (function_code == 0x3) {
+      char buffer[1024];
+      int offset = 0;
+      for (uint8_t i = 3; i < byte_count+3; i+=2) {
+        offset += sprintf(buffer + offset, "%d, ", (int) data[i]<<8 | data[i+1]); 
+      }
+      ESP_LOGI(TAG, " Values: %s", buffer);
+    }
+    //ESP_LOGW(TAG, "  %s", format_hex_pretty(&data[3], byte_count).c_str());
+  } else if (code == ModbusFunctionCode::WriteMultipleCoils ||
+             code == ModbusFunctionCode::WriteMultipleRegisters) {
     start_address = uint16_t(data[2] << 8 | data[3]);
     quantity = uint16_t(data[4] << 8 | data[5]);
-    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X response:", frame_address, function_code);
-    ESP_LOGW(TAG, "  Written %d elements starting at address %d.", quantity, start_address);
+    ESP_LOGW(TAG, "Device 0x%02X Responding %s(0x%02X):  Written %d elements starting at address %d.", frame_address, get_function_code_name(function_code), function_code, quantity, start_address);
   } else if ((function_code & 0x80) == 0x80) {
     uint8_t error_code = data[2];
     function_code &= 0x7F;
@@ -191,6 +255,7 @@ void Modbus::dump_config() {
   LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
   ESP_LOGCONFIG(TAG, "  Send Wait Time: %d ms", this->send_wait_time_);
   ESP_LOGCONFIG(TAG, "  CRC Disabled: %s", YESNO(this->disable_crc_));
+  ESP_LOGCONFIG(TAG, "  Accept Broadcast: %s", YESNO(this->accept_broadcast_));
 }
 float Modbus::get_setup_priority() const {
   // After UART bus

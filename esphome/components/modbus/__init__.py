@@ -15,11 +15,16 @@ DEPENDENCIES = ["uart"]
 modbus_ns = cg.esphome_ns.namespace("modbus")
 Modbus = modbus_ns.class_("Modbus", cg.Component, uart.UARTDevice)
 ModbusDevice = modbus_ns.class_("ModbusDevice")
+ModbusServer = modbus_ns.class_("ModbusServer")
 MULTI_CONF = True
 
 CONF_ROLE = "role"
 CONF_MODBUS_ID = "modbus_id"
 CONF_SEND_WAIT_TIME = "send_wait_time"
+CONF_ACCEPT_BROADCAST = "accept_broadcast"
+CONF_SERVER_ADDRESS = "server_address"
+CONF_REGISTER_START = "register_start"
+CONF_REGISTER_COUNT = "register_count"
 
 ModbusRole = modbus_ns.enum("ModbusRole")
 MODBUS_ROLES = {
@@ -70,9 +75,28 @@ def modbus_device_schema(default_address):
         schema[cv.Optional(CONF_ADDRESS, default=default_address)] = cv.hex_uint8_t
     return cv.Schema(schema)
 
+def modbus_server_schema():
+    schema = {
+        cv.GenerateID(CONF_MODBUS_ID): cv.use_id(Modbus),
+        cv.Optional(CONF_ACCEPT_BROADCAST, default=False): cv.boolean,
+        cv.Required(CONF_SERVER_ADDRESS): cv.positive_not_null_int,
+        cv.Required(CONF_REGISTER_START): cv.positive_not_null_int,
+        cv.Required(CONF_REGISTER_COUNT): cv.positive_not_null_int
+    }
+    return cv.Schema(schema)
 
 async def register_modbus_device(var, config):
     parent = await cg.get_variable(config[CONF_MODBUS_ID])
     cg.add(var.set_parent(parent))
     cg.add(var.set_address(config[CONF_ADDRESS]))
     cg.add(parent.register_device(var))
+
+async def register_modbus_server(var, config):
+    parent = await cg.get_variable(config[CONF_MODBUS_ID])
+    cg.add(var.set_parent(parent))
+    cg.add(parent.register_server(var))
+    cg.add(var.set_accept_broadcast(config[CONF_ACCEPT_BROADCAST]))
+    cg.add(var.set_address(config[CONF_SERVER_ADDRESS]))
+    cg.add(var.set_register_start(config[CONF_REGISTER_START]))
+    cg.add(var.set_register_count(config[CONF_REGISTER_COUNT]))
+
