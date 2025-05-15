@@ -80,8 +80,7 @@ def modbus_server_schema():
         cv.GenerateID(CONF_MODBUS_ID): cv.use_id(Modbus),
         cv.Optional(CONF_ACCEPT_BROADCAST, default=False): cv.boolean,
         cv.Required(CONF_SERVER_ADDRESS): cv.positive_not_null_int,
-        cv.Required(CONF_REGISTER_START): cv.positive_not_null_int,
-        cv.Required(CONF_REGISTER_COUNT): cv.positive_not_null_int
+
     }
     return cv.Schema(schema)
 
@@ -97,6 +96,4 @@ async def register_modbus_server(var, config):
     cg.add(parent.register_server(var))
     cg.add(var.set_accept_broadcast(config[CONF_ACCEPT_BROADCAST]))
     cg.add(var.set_address(config[CONF_SERVER_ADDRESS]))
-    cg.add(var.set_register_start(config[CONF_REGISTER_START]))
-    cg.add(var.set_register_count(config[CONF_REGISTER_COUNT]))
 
