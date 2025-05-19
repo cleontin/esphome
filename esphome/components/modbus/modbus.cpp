@@ -82,6 +82,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
 
   // Data length and offset depends on the function code and whether the frame is a request or a response
+  // As we want to intercept all frames and we don't know if it's a request or response yet, we need to
+  // check both a request and a response length at the same time
   ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
   if (code == ModbusFunctionCode::ReadCoils ||
       code == ModbusFunctionCode::ReadDiscreteInputs ||
@@ -170,6 +172,12 @@ void Modbus::handle_request() {
   uint16_t start_address = 0;
   uint16_t quantity = 0;
   uint8_t byte_count = 0;
+  bool is_broadcast = false;
+
+  if (frame_address == 0) {
+    is_broadcast = true;
+    ESP_LOGV(TAG, "Broadcast request");
+  }
 
   if (code == ModbusFunctionCode::ReadCoils ||
       code == ModbusFunctionCode::ReadDiscreteInputs ||
@@ -180,6 +188,13 @@ void Modbus::handle_request() {
     quantity = uint16_t(data[4] << 8 | data[5]);
     ESP_LOGV(TAG, "Device 0x%02X Requesting %s(0x%02X) %d elements starting at address %d.",
              frame_address, get_function_code_name(function_code), function_code, quantity, start_address);
+
+    for (auto *server : this->servers_) {
+      if (server->address_ == frame_address ) {
+        ESP_LOGV(TAG, "Found matching server with address %d", server->address_);
+        server->on_read_registers(start_address, quantity, is_broadcast);
+      }
+    }
   }
   else if (code == ModbusFunctionCode::WriteMultipleCoils ||
            code == ModbusFunctionCode::WriteMultipleRegisters) {
@@ -204,7 +219,7 @@ void Modbus::handle_request() {
     for (auto *server : this->servers_) {
       if (server->address_ == frame_address || (server->accept_broadcast_ && frame_address == 0)) {
         ESP_LOGV(TAG, "Found matching server with address %d", server->address_);
-        server->on_write_registers(start_address, byte_count, &data[7]);        
+        server->on_write_registers(start_address, byte_count, &data[7], is_broadcast);        
       }
     }
   }
@@ -263,7 +278,8 @@ float Modbus::get_setup_priority() const {
 void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address, uint16_t number_of_entities,
                   uint8_t payload_len, const uint8_t *payload) {
   static const size_t MAX_VALUES = 128;
-
+  ESP_LOGW(TAG, "Modbus send: %d %d %d %d - %s", address, function_code, start_address, number_of_entities,
+            format_hex_pretty(payload, payload_len).c_str());
   // Only check max number of registers for standard function codes
   // Some devices use non standard codes like 0x43
   if (number_of_entities > MAX_VALUES && function_code <= 0x10) {
@@ -306,9 +322,8 @@ void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address
 
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(false);
-  waiting_for_response = address;
+  //waiting_for_response = address;
   last_send_ = millis();
-  ESP_LOGV(TAG, "Modbus write: %s", format_hex_pretty(data).c_str());
 }
 
 // Helper function for lambdas
