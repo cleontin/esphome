@@ -90,8 +90,6 @@ void Hayward::on_write_registers(uint16_t start_address, uint16_t bytes, const u
   else {
     ESP_LOGW(TAG, "Unknown register write: %d %d", start_address, bytes);
   }
-
-  
 }
 
 void Hayward::on_read_registers(uint16_t start_address, uint16_t count, bool is_broadcast) {
@@ -107,7 +105,7 @@ void Hayward::on_read_registers(uint16_t start_address, uint16_t count, bool is_
   this->set_register(3015, digitsToUint(now.hour));
   this->set_register(3016, digitsToUint(now.minute));
   this->set_register(3017, digitsToUint(now.second));
-  
+
 
 
   if (start_address == 3001 && count == 30) {
@@ -220,7 +218,7 @@ void Hayward::update_diagnostic_entities() {
 }
 
 void Hayward::update_settings_entities() {
-  
+
   climate::ClimateCall climate_call = this->hayward_climate_->make_call();
 
   for (int reg = 1001; reg < 1091; reg++) {
@@ -270,7 +268,7 @@ void Hayward::update_settings_entities() {
   }
   climate_call.perform();
 }
-    
+
 void Hayward::update_extra_settings_entities() {
   for (int reg = 1091; reg < 1181; reg++) {
     int index = (reg - 1091) * 2;

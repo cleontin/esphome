@@ -70,8 +70,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
 
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  
-  
+
+
   // We need at least byte 3  (2 and 3 being CRC) for a valid message
   if (at < 3)
     return true;
@@ -114,7 +114,7 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
     data_len = 1;
   }
 
-  // We need the CRC bytes for either a request or a response 
+  // We need the CRC bytes for either a request or a response
   if ((at < data_offset + data_len + 1) && (at < data_offset + rs_data_len + 1))
     return true;
 
@@ -146,8 +146,8 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
       this->handle_response();
       return false; // Start a new frame
     }
-  } 
-  
+  }
+
   if ((at > data_offset + data_len + 1) && (at > data_offset + rs_data_len + 1)) {
     ESP_LOGW(TAG, "Frame did not match: %s", format_hex_pretty(raw,at+1).c_str());
     ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
@@ -215,11 +215,11 @@ void Modbus::handle_request() {
       ESP_LOGV(TAG, " Values: %s", buffer);
 
     }
-  
+
     for (auto *server : this->servers_) {
       if (server->address_ == frame_address || (server->accept_broadcast_ && frame_address == 0)) {
         ESP_LOGV(TAG, "Found matching server with address %d", server->address_);
-        server->on_write_registers(start_address, byte_count, &data[7], is_broadcast);        
+        server->on_write_registers(start_address, byte_count, &data[7], is_broadcast);
       }
     }
   }
@@ -246,7 +246,7 @@ void Modbus::handle_response() {
       char buffer[1024];
       int offset = 0;
       for (uint8_t i = 3; i < byte_count+3; i+=2) {
-        offset += sprintf(buffer + offset, "%d, ", (int) data[i]<<8 | data[i+1]); 
+        offset += sprintf(buffer + offset, "%d, ", (int) data[i]<<8 | data[i+1]);
       }
       ESP_LOGV(TAG, " Values: %s", buffer);
     }

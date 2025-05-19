@@ -16,12 +16,12 @@ namespace hayward {
 class Hayward;
 
 class HaywardSwitch : public switch_::Switch, public Component {
-      
+
   protected:
     void write_state(bool state) override;
     uint16_t register_address_;
     hayward::Hayward *parent_;
-  
+
   public:
     void set_register(uint16_t register_address) { this->register_address_ = register_address; }
     uint16_t get_register() { return this->register_address_; }
@@ -41,16 +41,16 @@ class HaywardHour : public number::Number, public Component {
 
      void control(float value) override;
 
-   
+
 };
 
-  
+
 class HaywardClimate : public climate::Climate, public Component {
   public:
     void setup() override;
     void set_parent(hayward::Hayward *parent) { this->parent_ = parent; }
     void on_state_change(climate::Climate& climate);
-  
+
   protected:
     hayward::Hayward *parent_;
     void control(const climate::ClimateCall &call) override;
@@ -61,7 +61,7 @@ class HaywardClimate : public climate::Climate, public Component {
               climate::CLIMATE_MODE_OFF,
               climate::CLIMATE_MODE_HEAT,
               climate::CLIMATE_MODE_COOL,
-							climate::CLIMATE_MODE_AUTO,
+              climate::CLIMATE_MODE_AUTO,
           });
           // traits.set_supports_action(true);
           traits.set_visual_temperature_step(0.5);
@@ -70,7 +70,7 @@ class HaywardClimate : public climate::Climate, public Component {
 
       return traits;
     }
-  
+
   };
 
 class Hayward : public modbus::ModbusServer, public Component {
@@ -82,7 +82,7 @@ class Hayward : public modbus::ModbusServer, public Component {
   void on_write_registers(uint16_t start_address, uint16_t bytes, const uint8_t *data, bool is_broadcast) override;
   void on_read_registers(uint16_t start_address, uint16_t count, bool is_broadcast) override;
   uint16_t encode_uint16_t(uint8_t msb, uint8_t lsb) { return ((static_cast<uint16_t>(msb) << 8) | lsb); }
-  
+
   float bytesToInt(const std::array<uint8_t, 180>& buffer, size_t index);
   float bytesToTenths(const std::array<uint8_t, 180>& buffer, size_t index);
   uint16_t digitsToUint(int16_t value);
@@ -151,7 +151,7 @@ class Hayward : public modbus::ModbusServer, public Component {
     void set_exhaust_temperature(sensor::Sensor *exhaust_temperature_sensor) { exhaust_temperature_sensor_ = exhaust_temperature_sensor; }
     void set_compressor_current(sensor::Sensor *compressor_current_sensor) { compressor_current_sensor_ = compressor_current_sensor; }
     void set_ac_fan_output(sensor::Sensor *ac_fan_output_sensor) { ac_fan_output_sensor_ = ac_fan_output_sensor; }
-    void set_target_speed_fan_motor(sensor::Sensor *target_speed_fan_motor_sensor) { target_speed_fan_motor_sensor_ = target_speed_fan_motor_sensor; }    
+    void set_target_speed_fan_motor(sensor::Sensor *target_speed_fan_motor_sensor) { target_speed_fan_motor_sensor_ = target_speed_fan_motor_sensor; }
     void set_inverter_plate_ac_voltage(sensor::Sensor *inverter_plate_ac_voltage_sensor) { inverter_plate_ac_voltage_sensor_ = inverter_plate_ac_voltage_sensor; }
     void set_speed_fan_motor_1(sensor::Sensor *speed_fan_motor_1_sensor) { speed_fan_motor_1_sensor_ = speed_fan_motor_1_sensor; }
     void set_super_heat(sensor::Sensor *super_heat_temperature_sensor) { super_heat_temperature_sensor_ = super_heat_temperature_sensor; }
@@ -163,28 +163,28 @@ class Hayward : public modbus::ModbusServer, public Component {
       this->schedule_silent_active_switch_->set_register(1072);
     }
     void set_schedule_on_active(hayward::HaywardSwitch *schedule_on_active_switch) {
-      schedule_on_active_switch_ = schedule_on_active_switch; 
+      schedule_on_active_switch_ = schedule_on_active_switch;
       this->schedule_on_active_switch_->set_register(1158);
     }
-    void set_schedule_off_active(hayward::HaywardSwitch *schedule_off_active_switch) { 
-      schedule_off_active_switch_ = schedule_off_active_switch; 
+    void set_schedule_off_active(hayward::HaywardSwitch *schedule_off_active_switch) {
+      schedule_off_active_switch_ = schedule_off_active_switch;
       this->schedule_off_active_switch_->set_register(1159);
     }
 
-    void set_schedule_silent_start_hour(hayward::HaywardHour *schedule_silent_start_hour) { 
-      schedule_silent_start_hour_ = schedule_silent_start_hour; 
+    void set_schedule_silent_start_hour(hayward::HaywardHour *schedule_silent_start_hour) {
+      schedule_silent_start_hour_ = schedule_silent_start_hour;
       this->schedule_silent_start_hour_->set_register(1068);
     }
-    void set_schedule_silent_stop_hour(hayward::HaywardHour *schedule_silent_stop_hour) { 
-      schedule_silent_stop_hour_ = schedule_silent_stop_hour; 
+    void set_schedule_silent_stop_hour(hayward::HaywardHour *schedule_silent_stop_hour) {
+      schedule_silent_stop_hour_ = schedule_silent_stop_hour;
       this->schedule_silent_stop_hour_->set_register(1069);
     }
-    void set_schedule_on_hour(hayward::HaywardHour *schedule_on_hour) { 
-      schedule_on_hour_ = schedule_on_hour; 
+    void set_schedule_on_hour(hayward::HaywardHour *schedule_on_hour) {
+      schedule_on_hour_ = schedule_on_hour;
       this->schedule_on_hour_->set_register(1150);
     }
-    void set_schedule_off_hour(hayward::HaywardHour *schedule_off_hour) { 
-      schedule_off_hour_ = schedule_off_hour; 
+    void set_schedule_off_hour(hayward::HaywardHour *schedule_off_hour) {
+      schedule_off_hour_ = schedule_off_hour;
       this->schedule_off_hour_->set_register(1152);
     }
 

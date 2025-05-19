@@ -111,10 +111,10 @@ class ModbusServer {
      this->parent_->send(this->address_, function, start_address, number_of_entities, payload_len, payload);
    }
    void send_raw(const std::vector<uint8_t> &payload) { this->parent_->send_raw(payload); }
- 
+
   protected:
    friend Modbus;
- 
+
    Modbus *parent_;
    uint8_t address_;
    uint16_t register_start_;

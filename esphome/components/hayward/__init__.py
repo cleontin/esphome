@@ -243,7 +243,7 @@ SWITCHES = [
         CONF_DEVICE_CLASS: DEVICE_CLASS_SWITCH,
         CONF_ENTITY_CATEGORY: ENTITY_CATEGORY_CONFIG,
     },
-    
+
 ]
 NUMBERS = [
     {
@@ -299,10 +299,10 @@ NUMBERS = [
 
 CLIMATE = [
     {
-				CONF_KEY: CONF_HAYWARD_CLIMATE,
-				CONF_NAME: "Hayward Climate",
-				CONF_DISABLED_BY_DEFAULT: False,
-		}
+        CONF_KEY: CONF_HAYWARD_CLIMATE,
+        CONF_NAME: "Hayward Climate",
+        CONF_DISABLED_BY_DEFAULT: False,
+    }
 ]
 
 TIME = {
@@ -380,7 +380,7 @@ async def to_code(config):
         nu_conf = config[nu[CONF_KEY]]
         nu_inst = await number.new_number(nu_conf, min_value=0, max_value=23, step=1)
         cg.add(getattr(var, "set_" + nu[CONF_KEY])(nu_inst))
-        
+
     for cl in CLIMATE:
       cl_conf = config[cl[CONF_KEY]]
       print("Adding climate", cl[CONF_KEY])
@@ -395,4 +395,3 @@ async def to_code(config):
         time_inst = cg.new_Pvariable(time_conf[CONF_ID])
         await homeassistant.register_time(time_inst, time_conf)
         cg.add(var.set_time(time_inst))
-            
