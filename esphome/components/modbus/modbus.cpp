@@ -47,6 +47,29 @@ void Modbus::loop() {
   }
 }
 
+const char* get_function_code_name(uint8_t code) {
+  switch (code) {
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadCoils):
+      return "Read Coils";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadDiscreteInputs):
+      return "Read Discrete Inputs";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadHoldingRegisters):
+      return "Read Holding Registers";
+    case static_cast<uint8_t>(ModbusFunctionCode::ReadInputRegisters):
+      return "Read Input Registers";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteSingleCoil):
+      return "Write Single Coil";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteSingleRegister):
+      return "Write Single Register";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteMultipleCoils):
+      return "Write Multiple Coils";
+    case static_cast<uint8_t>(ModbusFunctionCode::WriteMultipleRegisters):
+      return "Write Multiple Registers";
+    default:
+      return "Unknown Function Code";
+  }
+}
+
 bool Modbus::parse_modbus_byte_(uint8_t byte) {
   size_t at = this->rx_buffer_.size();
   this->rx_buffer_.push_back(byte);
@@ -54,112 +77,202 @@ bool Modbus::parse_modbus_byte_(uint8_t byte) {
   ESP_LOGVV(TAG, "Modbus received Byte  %d (0X%x)", byte, byte);
   // Byte 0: modbus address (match all)
   if (at == 0)
+    // Byte 0: modbus address, valid so far
     return true;
+
   uint8_t address = raw[0];
   uint8_t function_code = raw[1];
-  // Byte 2: Size (with modbus rtu function code 4/3)
-  // See also https://en.wikipedia.org/wiki/Modbus
-  if (at == 2)
+
+
+  // We need at least byte 3  (2 and 3 being CRC) for a valid message
+  if (at < 3)
     return true;
 
-  uint8_t data_len = raw[2];
-  uint8_t data_offset = 3;
+  uint8_t data_offset = 2;
+  uint8_t data_len = 1;
+  uint8_t rs_data_len = 1;
 
-  // Per https://modbus.org/docs/Modbus_Application_Protocol_V1_1b3.pdf Ch 5 User-Defined function codes
-  if (((function_code >= 65) && (function_code <= 72)) || ((function_code >= 100) && (function_code <= 110))) {
-    // Handle user-defined function, since we don't know how big this ought to be,
-    // ideally we should delegate the entire length detection to whatever handler is
-    // installed, but wait, there is the CRC, and if we get a hit there is a good
-    // chance that this is a complete message ... admittedly there is a small chance is
-    // isn't but that is quite small given the purpose of the CRC in the first place
 
-    // Fewer than 2 bytes can't calc CRC
-    if (at < 2)
-      return true;
+  // Data length and offset depends on the function code and whether the frame is a request or a response
+  // As we want to intercept all frames and we don't know if it's a request or response yet, we need to
+  // check both a request and a response length at the same time
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
+    data_len = 4;
+    rs_data_len = (at > 1) ? uint8_t(raw[2]) + 1 : 2;
+  }
+  else if (code == ModbusFunctionCode::WriteSingleCoil ||
+             code == ModbusFunctionCode::WriteSingleRegister) {
+    data_len = 4;
+    rs_data_len = 4;
+  }
+  else if (function_code == 0x7) {
+    data_len = 0;
+    rs_data_len = 1;
+  }
+  else if (function_code == 0x9) {
+    data_len = 0;
+    rs_data_len = 4;
+  }
+  else if (code == ModbusFunctionCode::WriteMultipleCoils  ||
+             code == ModbusFunctionCode::WriteMultipleRegisters) {
+    data_len = (at > 5) ? uint8_t(raw[6]) + 5 : 6;
+    rs_data_len = 4;
+  }
+  else if ((function_code & 0x80) == 0x80) {
+    data_len = 1;
+  }
 
-    data_len = at - 2;
-    data_offset = 1;
+  // We need the CRC bytes for either a request or a response
+  if ((at < data_offset + data_len + 1) && (at < data_offset + rs_data_len + 1))
+    return true;
 
+
+  std::vector<uint8_t> data(this->rx_buffer_.begin(), this->rx_buffer_.begin() + at + 1);
+
+  // Are we at the right length for a request or response?
+  if (at == data_offset + data_len + 1) {
+    // We might have a request here
     uint16_t computed_crc = crc16(raw, data_offset + data_len);
     uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
 
-    if (computed_crc != remote_crc)
-      return true;
-
-    ESP_LOGD(TAG, "Modbus user-defined function %02X found", function_code);
-
-  } else {
-    // data starts at 2 and length is 4 for read registers commands
-    if (this->role == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
-      data_offset = 2;
-      data_len = 4;
+    if (computed_crc == remote_crc) {
+      ESP_LOGV(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      ESP_LOGV(TAG, "  Function: %02X request, Len: %02X", function_code, data_len);
+      ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
+      this->handle_request();
+      return false; // Start a new frame
     }
+  } else if (at == data_offset + rs_data_len + 1) {
+    // Check for a response
+    uint16_t computed_crc = crc16(raw, data_offset + rs_data_len);
+    uint16_t remote_crc = uint16_t(raw[data_offset + rs_data_len]) | (uint16_t(raw[data_offset + rs_data_len + 1]) << 8);
 
-    // the response for write command mirrors the requests and data starts at offset 2 instead of 3 for read commands
-    if (function_code == 0x5 || function_code == 0x06 || function_code == 0xF || function_code == 0x10) {
-      data_offset = 2;
-      data_len = 4;
-    }
-
-    // Error ( msb indicates error )
-    // response format:  Byte[0] = device address, Byte[1] function code | 0x80 , Byte[2] exception code, Byte[3-4] crc
-    if ((function_code & 0x80) == 0x80) {
-      data_offset = 2;
-      data_len = 1;
-    }
-
-    // Byte data_offset..data_offset+data_len-1: Data
-    if (at < data_offset + data_len)
-      return true;
-
-    // Byte 3+data_len: CRC_LO (over all bytes)
-    if (at == data_offset + data_len)
-      return true;
-
-    // Byte data_offset+len+1: CRC_HI (over all bytes)
-    uint16_t computed_crc = crc16(raw, data_offset + data_len);
-    uint16_t remote_crc = uint16_t(raw[data_offset + data_len]) | (uint16_t(raw[data_offset + data_len + 1]) << 8);
-    if (computed_crc != remote_crc) {
-      if (this->disable_crc_) {
-        ESP_LOGD(TAG, "Modbus CRC Check failed, but ignored! %02X!=%02X", computed_crc, remote_crc);
-      } else {
-        ESP_LOGW(TAG, "Modbus CRC Check failed! %02X!=%02X", computed_crc, remote_crc);
-        return false;
-      }
+    if (computed_crc == remote_crc) {
+      ESP_LOGV(TAG, "Modbus CRC Check matches! %02X==%02X", computed_crc, remote_crc);
+      ESP_LOGV(TAG, "  Function: %02X response, Len: %02X", function_code, rs_data_len);
+      ESP_LOGV(TAG, "  Frame: %s", format_hex_pretty(raw,at+1).c_str());
+      this->handle_response();
+      return false; // Start a new frame
     }
   }
-  std::vector<uint8_t> data(this->rx_buffer_.begin() + data_offset, this->rx_buffer_.begin() + data_offset + data_len);
-  bool found = false;
-  for (auto *device : this->devices_) {
-    if (device->address_ == address) {
-      // Is it an error response?
-      if ((function_code & 0x80) == 0x80) {
-        ESP_LOGD(TAG, "Modbus error function code: 0x%X exception: %d", function_code, raw[2]);
-        if (waiting_for_response != 0) {
-          device->on_modbus_error(function_code & 0x7F, raw[2]);
-        } else {
-          // Ignore modbus exception not related to a pending command
-          ESP_LOGD(TAG, "Ignoring Modbus error - not expecting a response");
-        }
-      } else if (this->role == ModbusRole::SERVER && (function_code == 0x3 || function_code == 0x4)) {
-        device->on_modbus_read_registers(function_code, uint16_t(data[1]) | (uint16_t(data[0]) << 8),
-                                         uint16_t(data[3]) | (uint16_t(data[2]) << 8));
-      } else {
-        device->on_modbus_data(data);
-      }
-      found = true;
-    }
-  }
-  waiting_for_response = 0;
 
-  if (!found) {
-    ESP_LOGW(TAG, "Got Modbus frame from unknown address 0x%02X! ", address);
+  if ((at > data_offset + data_len + 1) && (at > data_offset + rs_data_len + 1)) {
+    ESP_LOGW(TAG, "Frame did not match: %s", format_hex_pretty(raw,at+1).c_str());
+    ESP_LOGW(TAG, "  Frame: %s", format_hex_pretty(raw, data_offset + data_len).c_str());
+    ESP_LOGW(TAG, "  Offset: %d", data_offset);
+    ESP_LOGW(TAG, "  RqLen: %d", data_len);
+    ESP_LOGW(TAG, "  RsLen: %d", rs_data_len);
+    ESP_LOGW(TAG, "  At: %d", uint8_t(at));
+    return false; //Start again
   }
 
-  // reset buffer
-  ESP_LOGV(TAG, "Clearing buffer of %d bytes - parse succeeded", at);
-  this->rx_buffer_.clear();
   return true;
+
+}
+
+void Modbus::handle_request() {
+
+  const uint8_t *data = &this->rx_buffer_[0];
+
+  uint8_t frame_address = data[0];
+  uint8_t function_code = data[1];
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
+  uint16_t start_address = 0;
+  uint16_t quantity = 0;
+  uint8_t byte_count = 0;
+  bool is_broadcast = false;
+
+  if (frame_address == 0) {
+    is_broadcast = true;
+    ESP_LOGV(TAG, "Broadcast request");
+  }
+
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
+
+    start_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    ESP_LOGV(TAG, "Device 0x%02X Requesting %s(0x%02X) %d elements starting at address %d.",
+             frame_address, get_function_code_name(function_code), function_code, quantity, start_address);
+
+    for (auto *server : this->servers_) {
+      if (server->address_ == frame_address ) {
+        ESP_LOGV(TAG, "Found matching server with address %d", server->address_);
+        server->on_read_registers(start_address, quantity, is_broadcast);
+      }
+    }
+  }
+  else if (code == ModbusFunctionCode::WriteMultipleCoils ||
+           code == ModbusFunctionCode::WriteMultipleRegisters) {
+
+    start_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    byte_count = data[6];
+    ESP_LOGV(TAG, "Device 0x%02X Request %s(0x%02X): %d elements (%d bytes) starting at address %d.",
+             frame_address, get_function_code_name(function_code), function_code, quantity, byte_count, start_address);
+    ESP_LOGVV(TAG, "  %s", format_hex_pretty(&data[7], byte_count).c_str());
+    if (code == ModbusFunctionCode::WriteMultipleRegisters) {
+      char buffer[2048];
+      int offset = 0;
+      for (int byte_index = 0; byte_index < byte_count; byte_index += 2) {
+        int value = data[7 + byte_index] << 8 | data[8 + byte_index];
+        offset += sprintf(buffer + offset, "%d, ", value);
+      }
+      ESP_LOGV(TAG, " Values: %s", buffer);
+
+    }
+
+    for (auto *server : this->servers_) {
+      if (server->address_ == frame_address || (server->accept_broadcast_ && frame_address == 0)) {
+        ESP_LOGV(TAG, "Found matching server with address %d", server->address_);
+        server->on_write_registers(start_address, byte_count, &data[7], is_broadcast);
+      }
+    }
+  }
+}
+
+void Modbus::handle_response() {
+
+  const uint8_t *data = &this->rx_buffer_[0];
+
+  uint8_t frame_address = data[0];
+  uint8_t function_code = data[1];
+  ModbusFunctionCode code = static_cast<ModbusFunctionCode>(function_code);
+  uint16_t start_address = 0;
+  uint16_t quantity = 0;
+  uint8_t byte_count = 0;
+
+  if (code == ModbusFunctionCode::ReadCoils ||
+      code == ModbusFunctionCode::ReadDiscreteInputs ||
+      code == ModbusFunctionCode::ReadHoldingRegisters ||
+      code == ModbusFunctionCode::ReadInputRegisters) {
+    byte_count = data[2];
+    ESP_LOGV(TAG, "Device 0x%02X Responding %s(0x%02X) with %d bytes of data:", frame_address, get_function_code_name(function_code), function_code, byte_count);
+    if (function_code == 0x3) {
+      char buffer[1024];
+      int offset = 0;
+      for (uint8_t i = 3; i < byte_count+3; i+=2) {
+        offset += sprintf(buffer + offset, "%d, ", (int) data[i]<<8 | data[i+1]);
+      }
+      ESP_LOGV(TAG, " Values: %s", buffer);
+    }
+    ESP_LOGVV(TAG, " Hex: %s", format_hex_pretty(&data[3], byte_count).c_str());
+  } else if (code == ModbusFunctionCode::WriteMultipleCoils ||
+             code == ModbusFunctionCode::WriteMultipleRegisters) {
+    start_address = uint16_t(data[2] << 8 | data[3]);
+    quantity = uint16_t(data[4] << 8 | data[5]);
+    ESP_LOGV(TAG, "Device 0x%02X Responding %s(0x%02X):  Written %d elements starting at address %d.", frame_address, get_function_code_name(function_code), function_code, quantity, start_address);
+  } else if ((function_code & 0x80) == 0x80) {
+    uint8_t error_code = data[2];
+    function_code &= 0x7F;
+    ESP_LOGW(TAG, "Device 0x%02X function 0x%02X returned error code 0x%02X.", frame_address, function_code, error_code);
+  }
 }
 
 void Modbus::dump_config() {
@@ -167,6 +280,7 @@ void Modbus::dump_config() {
   LOG_PIN("  Flow Control Pin: ", this->flow_control_pin_);
   ESP_LOGCONFIG(TAG, "  Send Wait Time: %d ms", this->send_wait_time_);
   ESP_LOGCONFIG(TAG, "  CRC Disabled: %s", YESNO(this->disable_crc_));
+  ESP_LOGCONFIG(TAG, "  Accept Broadcast: %s", YESNO(this->accept_broadcast_));
 }
 float Modbus::get_setup_priority() const {
   // After UART bus
@@ -176,7 +290,9 @@ float Modbus::get_setup_priority() const {
 void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address, uint16_t number_of_entities,
                   uint8_t payload_len, const uint8_t *payload) {
   static const size_t MAX_VALUES = 128;
-
+  ESP_LOGV(TAG, "Sending address=%d, function code=%d, start address=%d, count=%d ", address, function_code, start_address, number_of_entities,
+            format_hex_pretty(payload, payload_len).c_str());
+  ESP_LOGVV(TAG, "Frame data: %s", format_hex_pretty(payload, payload_len).c_str());
   // Only check max number of registers for standard function codes
   // Some devices use non standard codes like 0x43
   if (number_of_entities > MAX_VALUES && function_code <= 0x10) {
@@ -219,9 +335,8 @@ void Modbus::send(uint8_t address, uint8_t function_code, uint16_t start_address
 
   if (this->flow_control_pin_ != nullptr)
     this->flow_control_pin_->digital_write(false);
-  waiting_for_response = address;
+  //waiting_for_response = address;
   last_send_ = millis();
-  ESP_LOGV(TAG, "Modbus write: %s", format_hex_pretty(data).c_str());
 }
 
 // Helper function for lambdas
@@ -231,8 +346,9 @@ void Modbus::send_raw(const std::vector<uint8_t> &payload) {
     return;
   }
 
-  if (this->flow_control_pin_ != nullptr)
-    this->flow_control_pin_->digital_write(true);
+  // disable transmitting for now
+  //if (this->flow_control_pin_ != nullptr)
+  //  this->flow_control_pin_->digital_write(true);
 
   auto crc = crc16(payload.data(), payload.size());
   this->write_array(payload);
