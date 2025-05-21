@@ -1,14 +1,14 @@
-from __future__ import annotations
-
-from typing import Literal
-
-from esphome import pins
 import esphome.codegen as cg
-from esphome.components import uart
 import esphome.config_validation as cv
-from esphome.const import CONF_ADDRESS, CONF_DISABLE_CRC, CONF_FLOW_CONTROL_PIN, CONF_ID
 from esphome.cpp_helpers import gpio_pin_expression
-import esphome.final_validate as fv
+from esphome.components import uart
+from esphome.const import (
+    CONF_FLOW_CONTROL_PIN,
+    CONF_ID,
+    CONF_ADDRESS,
+    CONF_DISABLE_CRC,
+)
+from esphome import pins
 
 DEPENDENCIES = ["uart"]
 
@@ -25,12 +25,6 @@ CONF_ACCEPT_BROADCAST = "accept_broadcast"
 CONF_SERVER_ADDRESS = "server_address"
 CONF_REGISTER_START = "register_start"
 CONF_REGISTER_COUNT = "register_count"
-
-ModbusRole = modbus_ns.enum("ModbusRole")
-MODBUS_ROLES = {
-    "client": ModbusRole.CLIENT,
-    "server": ModbusRole.SERVER,
-}
 
 ModbusRole = modbus_ns.enum("ModbusRole")
 MODBUS_ROLES = {
@@ -89,28 +83,6 @@ def modbus_server_schema():
 
     }
     return cv.Schema(schema)
-
-def final_validate_modbus_device(
-    name: str, *, role: Literal["server", "client"] | None = None
-):
-    def validate_role(value):
-        assert role in MODBUS_ROLES
-        if value != role:
-            raise cv.Invalid(f"Component {name} requires role to be {role}")
-        return value
-
-    def validate_hub(hub_config):
-        hub_schema = {}
-        if role is not None:
-            hub_schema[cv.Required(CONF_ROLE)] = validate_role
-
-        return cv.Schema(hub_schema, extra=cv.ALLOW_EXTRA)(hub_config)
-
-    return cv.Schema(
-        {cv.Required(CONF_MODBUS_ID): fv.id_declaration_match_schema(validate_hub)},
-        extra=cv.ALLOW_EXTRA,
-    )
-
 
 async def register_modbus_device(var, config):
     parent = await cg.get_variable(config[CONF_MODBUS_ID])

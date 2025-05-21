@@ -60,8 +60,6 @@ class Modbus : public uart::UARTDevice, public Component {
 
   ModbusRole role;
 
-  ModbusRole role;
-
  protected:
   GPIOPin *flow_control_pin_{nullptr};
 
