@@ -336,7 +336,7 @@ CONFIG_SCHEMA = cv.Schema({
     })
     for s in SENSORS
 }).extend({
-    cv.Optional(s[CONF_KEY], default={}): switch.switch_schema(
+    cv.Optional(s[CONF_KEY], default={}): switch.switch_schema(switch.Switch,
         icon=s.get(CONF_ICON, ""),
         device_class=s.get(CONF_DEVICE_CLASS, ""),
         entity_category=s.get(CONF_ENTITY_CATEGORY, "")
